@@ -43,4 +43,4 @@ uv run python manage.py check
 
 Dependencies are pinned in `pyproject.toml`; `uv.lock` records the full resolved dependency set.
 
-The server foundation currently has no application models or migrations. The first schema discussion will determine the user and uploaded-file models before those are introduced. See [PLAN.md](PLAN.md) for the roadmap.
+The server foundation currently has no application models or migrations. Compose deliberately does not run migrations, so the user and uploaded-file models can be designed before Django creates any schema. See [PLAN.md](PLAN.md) for the roadmap.

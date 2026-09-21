@@ -17,9 +17,7 @@ services:
 
   web:
     build: .
-    command: >
-      sh -c ".venv/bin/python manage.py migrate &&
-      .venv/bin/python manage.py runserver 0.0.0.0:8000"
+    command: .venv/bin/python manage.py runserver 0.0.0.0:8000
     environment:
       POSTGRES_HOST: db
       POSTGRES_DB: signal_loop
