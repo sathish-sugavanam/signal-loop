@@ -1,0 +1,8 @@
+[project]
+name = "signal-loop"
+version = "0.1.0"
+description = "Signal Loop is a customer intelligence platform for product and engineering teams."
+readme = "README.md"
+requires-python = "3.14"
+dependencies = [
+]
