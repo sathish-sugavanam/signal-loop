@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.24 /uv /uvx /bin/
+RUN python -m pip install --no-cache-dir uv==0.12.17
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
