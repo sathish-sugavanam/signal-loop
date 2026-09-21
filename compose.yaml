@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_DB: signal_loop
+      POSTGRES_USER: signal_loop
+      POSTGRES_PASSWORD: signal_loop
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signal_loop -d signal_loop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    command: >
+      sh -c ".venv/bin/python manage.py migrate &&
+      .venv/bin/python manage.py runserver 0.0.0.0:8000"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: signal_loop
+      POSTGRES_USER: signal_loop
+      POSTGRES_PASSWORD: signal_loop
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
