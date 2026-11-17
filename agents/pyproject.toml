@@ -1,0 +1,25 @@
+[project]
+name = "signal-loop-agents"
+version = "0.1.0"
+description = "Always-on agent harness for Signal Loop: Triggered by webhooks fired from Linear, completes the features and raises the change as a PR."
+requires-python = ">=3.14"
+dependencies = [
+    "starlette==1.10.0",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2==2.16.2",
+    "pytest==9.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/signal_loop_agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

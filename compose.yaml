@@ -29,5 +29,16 @@ services:
     ports:
       - "8000:8000"
 
+  agent-webhook:
+    build: ./agents
+    env_file: ./agents/.env
+    ports:
+      - "127.0.0.1:5001:5001"
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres_data:
