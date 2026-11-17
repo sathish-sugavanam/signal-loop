@@ -1,31 +1,17 @@
-import pytest
-
-from signal_loop_agents.config import ConfigError, Settings, load_settings
+from signal_loop_agents.config import load_webhook_settings, load_worker_settings
 
 
-def test_loads_all_settings():
-    settings = load_settings({"LINEAR_WEBHOOK_SECRET": "s", "PORT": "9000"})
-    assert settings == Settings(linear_webhook_secret="s", port=9000)
+def test_worker_settings_defaults(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://agents:pw@db/agents")
+    monkeypatch.setenv("REDIS_URL", "redis://redis:6379/0")
+    settings = load_worker_settings()
+    assert (settings.poll_interval_seconds, settings.lease_seconds) == (2.0, 3600.0)
+    assert "pw" not in repr(settings)
 
 
-def test_port_defaults_to_5001():
-    assert load_settings({"LINEAR_WEBHOOK_SECRET": "s"}).port == 5001
-
-
-@pytest.mark.parametrize("secret", ["", "   "])
-def test_missing_secret_fails(secret):
-    with pytest.raises(ConfigError, match="LINEAR_WEBHOOK_SECRET"):
-        load_settings({"LINEAR_WEBHOOK_SECRET": secret})
-
-
-@pytest.mark.parametrize("port", ["abc", "0", "70000"])
-def test_invalid_port_fails(port):
-    with pytest.raises(ConfigError, match="PORT"):
-        load_settings({"LINEAR_WEBHOOK_SECRET": "s", "PORT": port})
-
-
-def test_reports_every_problem_at_once():
-    with pytest.raises(ConfigError) as exc:
-        load_settings({"PORT": "nope"})
-    assert "LINEAR_WEBHOOK_SECRET" in str(exc.value)
-    assert "PORT" in str(exc.value)
+def test_webhook_settings_defaults(monkeypatch):
+    monkeypatch.setenv("LINEAR_WEBHOOK_SECRET", "s3cret")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://agents:pw@db/agents")
+    settings = load_webhook_settings()
+    assert settings.port == 5001
+    assert "s3cret" not in repr(settings)

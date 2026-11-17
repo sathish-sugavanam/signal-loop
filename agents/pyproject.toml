@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Always-on agent harness for Signal Loop: Triggered by webhooks fired from Linear, completes the features and raises the change as a PR."
 requires-python = ">=3.14"
 dependencies = [
+    "celery[redis]==5.7.0",
+    "psycopg-pool==3.3.3",
+    "psycopg[binary]==3.3.6",
     "starlette==1.10.0",
     "uvicorn==0.54.0",
 ]

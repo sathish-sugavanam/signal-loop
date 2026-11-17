@@ -6,15 +6,38 @@ import time
 import pytest
 from starlette.testclient import TestClient
 
-from signal_loop_agents.config import Settings
+from signal_loop_agents.config import WebhookSettings
+from signal_loop_agents.inbox import NewEvent
 from signal_loop_agents.webhook import create_app
 
 SECRET = "test-secret"
+SETTINGS = WebhookSettings(linear_webhook_secret=SECRET, database_url="unused")
+
+
+class FakeInbox:
+    def __init__(self) -> None:
+        self.events: dict[str, NewEvent] = {}
+
+    async def record(self, event: NewEvent) -> bool:
+        if event.delivery_id in self.events:
+            return False
+        self.events[event.delivery_id] = event
+        return True
+
+
+class BrokenInbox:
+    async def record(self, event: NewEvent) -> bool:
+        raise ConnectionError("database is down")
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(create_app(Settings(linear_webhook_secret=SECRET)))
+def inbox() -> FakeInbox:
+    return FakeInbox()
+
+
+@pytest.fixture
+def client(inbox) -> TestClient:
+    return TestClient(create_app(SETTINGS, inbox=inbox))
 
 
 def sign(body: bytes, secret: str = SECRET) -> str:
@@ -32,18 +55,51 @@ def issue_payload(**overrides) -> dict:
     return payload
 
 
-def post(client: TestClient, body: bytes, signature: str | None):
-    headers = {"Content-Type": "application/json", "Linear-Delivery": "d-1", "Linear-Event": "Issue"}
+def post(
+    client: TestClient, body: bytes, signature: str | None, delivery: str | None = "d-1"
+):
+    headers = {"Content-Type": "application/json", "Linear-Event": "Issue"}
+    if delivery is not None:
+        headers["Linear-Delivery"] = delivery
     if signature is not None:
         headers["Linear-Signature"] = signature
     return client.post("/webhooks/linear", content=body, headers=headers)
 
 
-def test_valid_delivery_returns_200(client):
+def test_valid_delivery_is_stored(client, inbox):
     body = json.dumps(issue_payload()).encode()
     response = post(client, body, sign(body))
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json() == {"ok": True, "duplicate": False}
+    event = inbox.events["d-1"]
+    assert (event.action, event.issue_id) == ("update", "SIG-1")
+
+
+def test_repeated_delivery_is_acknowledged_once(client, inbox):
+    body = json.dumps(issue_payload()).encode()
+    post(client, body, sign(body))
+    response = post(client, body, sign(body))
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "duplicate": True}
+    assert len(inbox.events) == 1
+
+
+def test_missing_delivery_id_is_rejected(client, inbox):
+    body = json.dumps(issue_payload()).encode()
+    assert post(client, body, sign(body), delivery=None).status_code == 400
+    assert inbox.events == {}
+
+
+def test_rejected_delivery_is_not_stored(client, inbox):
+    body = json.dumps(issue_payload()).encode()
+    post(client, body, "bad")
+    assert inbox.events == {}
+
+
+def test_inbox_failure_returns_500_so_linear_retries():
+    client = TestClient(create_app(SETTINGS, inbox=BrokenInbox()), raise_server_exceptions=False)
+    body = json.dumps(issue_payload()).encode()
+    assert post(client, body, sign(body)).status_code == 500
 
 
 def test_missing_signature_is_rejected(client):

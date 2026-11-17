@@ -15,6 +15,14 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
 
+  redis:
+    image: redis:8.2-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   web:
     build: .
     command: .venv/bin/python manage.py runserver 0.0.0.0:8000
@@ -32,6 +40,10 @@ services:
   agent-webhook:
     build: ./agents
     env_file: ./agents/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5001:5001"
     healthcheck:
@@ -39,6 +51,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # Events are processed one at a time for now; raise --concurrency to scale.
+  agent-worker:
+    build: ./agents
+    command: [".venv/bin/celery", "-A", "signal_loop_agents.celery_app", "worker", "--concurrency=1", "--loglevel=INFO"]
+    env_file: ./agents/.env
+    depends_on: &worker-deps
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Exactly one beat process: a second one would fire every periodic task twice.
+  agent-beat:
+    build: ./agents
+    command: [".venv/bin/celery", "-A", "signal_loop_agents.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    env_file: ./agents/.env
+    depends_on: *worker-deps
+    restart: unless-stopped
 
 volumes:
   postgres_data:

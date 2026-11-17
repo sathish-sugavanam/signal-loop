@@ -1,43 +1,36 @@
-"""Settings for the agent services.
-
-The environment is read once, at boot, by `load_settings`. Nothing else in
-the package touches `os.environ`; code receives the values it needs as
-arguments.
-"""
+"""Settings for the agent services, read from the environment once at boot."""
 
 import os
-from collections.abc import Mapping
-from dataclasses import dataclass
-
-
-class ConfigError(RuntimeError):
-    pass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class Settings:
-    linear_webhook_secret: str
+class WebhookSettings:
+    linear_webhook_secret: str = field(repr=False)
+    database_url: str = field(repr=False)
     port: int = 5001
 
 
-def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
-    env = os.environ if environ is None else environ
-    errors: list[str] = []
+@dataclass(frozen=True)
+class WorkerSettings:
+    database_url: str = field(repr=False)
+    broker_url: str = field(repr=False)
+    poll_interval_seconds: float = 2.0
+    lease_seconds: float = 3600.0
 
-    secret = env.get("LINEAR_WEBHOOK_SECRET", "").strip()
-    if not secret:
-        errors.append("LINEAR_WEBHOOK_SECRET is not set")
 
-    port_raw = env.get("PORT", "5001")
-    try:
-        port = int(port_raw)
-        if not 1 <= port <= 65535:
-            raise ValueError
-    except ValueError:
-        errors.append(f"PORT must be an integer between 1 and 65535, got {port_raw!r}")
-        port = 0
+def load_webhook_settings() -> WebhookSettings:
+    return WebhookSettings(
+        linear_webhook_secret=os.environ["LINEAR_WEBHOOK_SECRET"],
+        database_url=os.environ["DATABASE_URL"],
+        port=int(os.environ.get("PORT", "5001")),
+    )
 
-    if errors:
-        raise ConfigError("; ".join(errors))
 
-    return Settings(linear_webhook_secret=secret, port=port)
+def load_worker_settings() -> WorkerSettings:
+    return WorkerSettings(
+        database_url=os.environ["DATABASE_URL"],
+        broker_url=os.environ["REDIS_URL"],
+        poll_interval_seconds=float(os.environ.get("WORKER_POLL_INTERVAL_SECONDS", "2")),
+        lease_seconds=float(os.environ.get("WORKER_LEASE_SECONDS", "3600")),
+    )
