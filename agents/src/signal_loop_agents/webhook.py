@@ -19,7 +19,12 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 from signal_loop_agents.config import WebhookSettings, load_webhook_settings
-from signal_loop_agents.inbox import Inbox, PostgresInbox, parse_event_from_linear
+from signal_loop_agents.inbox import (
+    Inbox,
+    PostgresInbox,
+    moved_to_agent_ready,
+    parse_event_from_linear,
+)
 
 log = logging.getLogger("signal_loop_agents.webhook")
 
@@ -63,6 +68,15 @@ async def handle_linear_webhook(
         return JSONResponse({"error": "missing Linear-Delivery header"}, status_code=400)
 
     event_type = request.headers.get("linear-event") or payload.get("type") or "unknown"
+    if not moved_to_agent_ready(event_type, payload):
+        log.info(
+            "ignored delivery=%s event=%s action=%s: not a move to Agent Ready",
+            delivery_id,
+            event_type,
+            payload.get("action"),
+        )
+        return JSONResponse({"ok": True, "ignored": True})
+
     event = parse_event_from_linear(delivery_id, event_type, payload)
     stored = await inbox.record(event)
 

@@ -32,6 +32,24 @@ class InboxEvent:
     attempts: int
 
 
+# The Linear workflow status that hands an issue to the agent.
+AGENT_READY_STATE = "Agent Ready"
+
+
+def moved_to_agent_ready(event_type: str, payload: dict[str, Any]) -> bool:
+    """True only when an issue's status was just changed to Agent Ready.
+
+    Linear lists the changed fields' previous values in `updatedFrom`, so a
+    `stateId` there means the status changed in this update.
+    """
+    if event_type != "Issue" or payload.get("action") != "update":
+        return False
+    if "stateId" not in (payload.get("updatedFrom") or {}):
+        return False
+    state = (payload.get("data") or {}).get("state") or {}
+    return str(state.get("name", "")).casefold() == AGENT_READY_STATE.casefold()
+
+
 def parse_event_from_linear(delivery_id: str, event_type: str, payload: dict[str, Any]) -> NewEvent:
     """Keys the event by its issue's readable identifier (SIG-7).
 

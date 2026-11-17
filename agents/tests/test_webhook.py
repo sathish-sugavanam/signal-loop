@@ -48,7 +48,13 @@ def issue_payload(**overrides) -> dict:
     payload = {
         "action": "update",
         "type": "Issue",
-        "data": {"id": "abc", "identifier": "SIG-1", "title": "Example"},
+        "data": {
+            "id": "abc",
+            "identifier": "SIG-1",
+            "title": "Example",
+            "state": {"id": "s-ready", "name": "Agent Ready", "type": "started"},
+        },
+        "updatedFrom": {"stateId": "s-todo", "updatedAt": "2026-11-17T00:00:00.000Z"},
         "webhookTimestamp": int(time.time() * 1000),
     }
     payload.update(overrides)
@@ -144,3 +150,42 @@ def test_get_is_not_allowed(client):
 def test_healthz(client):
     assert client.get("/healthz").text == "ok"
 
+
+
+def ignored(client, inbox, payload, event="Issue") -> bool:
+    body = json.dumps(payload).encode()
+    response = client.post(
+        "/webhooks/linear",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "Linear-Event": event,
+            "Linear-Delivery": "d-ignored",
+            "Linear-Signature": sign(body),
+        },
+    )
+    assert response.status_code == 200
+    return response.json() == {"ok": True, "ignored": True} and inbox.events == {}
+
+
+def test_comment_is_ignored(client, inbox):
+    payload = issue_payload(type="Comment", action="create", data={"id": "c-1", "issueId": "abc"})
+    payload.pop("updatedFrom")
+    assert ignored(client, inbox, payload, event="Comment")
+
+
+def test_edit_without_status_change_is_ignored(client, inbox):
+    # Title edited while the issue already sits in Agent Ready.
+    assert ignored(client, inbox, issue_payload(updatedFrom={"title": "Old title"}))
+
+
+def test_move_to_another_status_is_ignored(client, inbox):
+    payload = issue_payload()
+    payload["data"]["state"] = {"id": "s-done", "name": "Done", "type": "completed"}
+    assert ignored(client, inbox, payload)
+
+
+def test_issue_created_is_ignored(client, inbox):
+    payload = issue_payload(action="create")
+    payload.pop("updatedFrom")
+    assert ignored(client, inbox, payload)
