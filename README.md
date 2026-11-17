@@ -9,6 +9,8 @@ Signal Loop is a customer intelligence platform for product and engineering team
 - Docker
 - OpenAI APIs for conversational answers
 - React for the frontend (deferred)
+- Celery for background jobs
+- Redis as the Celery broker
 
 ## Run locally
 
