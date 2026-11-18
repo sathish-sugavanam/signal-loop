@@ -11,7 +11,7 @@ This is a prototype. It runs locally in Docker on the developer's Mac and lives 
 ```mermaid
 flowchart LR
     subgraph Linear
-        issue["Issue moved to<br/>Ready for Agent"]
+        issue["Issue moved to<br/>Agent Ready"]
         comment["Your comment<br/>on the issue"]
     end
 
@@ -88,14 +88,14 @@ Every return to the coder, whether from a test dispute, a tester gap, or a secur
 
 - The harness is a standalone Python package in `agents/` with its own `pyproject.toml`, built on the Claude Agent SDK. It is not a Django app, so its tables never enter the product's migrations.
 - Docker Compose gains two services, `agent-webhook` and `agent-worker`, and an `agents` database on the existing Postgres container.
-- The queue is a plain Postgres table claimed with `SELECT … FOR UPDATE SKIP LOCKED`. There is no Redis or Celery.
+- The queue is a plain Postgres table claimed with `SELECT … FOR UPDATE SKIP LOCKED`. Celery, with Redis as its broker, runs the worker: beat checks the table every few seconds and fails tasks whose lease expired. Task state lives only in the table.
 
 ### Triggers and the inbox
 
-- A run starts when a Linear issue moves to **Ready for Agent**.
+- A run starts when a Linear issue moves to **Agent Ready**.
 - Linear webhooks reach the Mac through **Tailscale Funnel**, which gives a stable public HTTPS URL. Funnel must be enabled for the machine in the tailnet policy, with MagicDNS and HTTPS certificates on, on port 443, 8443 or 10000.
 - The webhook handler verifies Linear's signature, dedupes on the delivery ID, inserts an inbox row and returns immediately. No agent work happens in the handler.
-- On startup the worker polls Linear for issues in **Ready for Agent** that have no inbox row, so nothing is lost while the Mac sleeps.
+- On startup the worker polls Linear for issues in **Agent Ready** that have no inbox row, so nothing is lost while the Mac sleeps.
 - Later edits to an issue, and comments on it, become new inbox events for that issue.
 - **Only comments from the developer's Linear user ID count as input.** The agent's own comments are ignored so they cannot trigger it again. Comments from anyone else are logged and ignored.
 - One worker runs one run at a time. The queue enforces at most one active run per issue, so more workers can be added later without a redesign.
@@ -115,7 +115,7 @@ An issue is ready for the agent when it has:
 
 The **Feature** and **Bug** labels tell the pipeline which kind of issue it is. If acceptance criteria are missing, the agent comments what is missing and moves the issue to **Needs Human** without spending tokens on coding.
 
-Statuses: **Ready for Agent** → **Agent Working** → **In Review** (a comment links the PR) or **Needs Human** (a comment explains why). The agent comments only when a step finishes, never in a stream.
+Statuses: **Agent Ready** → **Agent Working** → **In Review** (a comment links the PR) or **Needs Human** (a comment explains why). The agent comments only when a step finishes, never in a stream.
 
 ### Run isolation
 
@@ -175,7 +175,7 @@ Each agent gets a **fresh SDK session** in the same container and working tree, 
 - Body: a summary, the acceptance criteria checklist with test evidence, security findings, and turns and cost used.
 - **Ready for review** when everything is clean, **draft** when findings remain open after 2 feedback rounds.
 - The agent never merges.
-- To ask for changes, comment on the issue and move it back to **Ready for Agent**. The run continues on the same branch and the same PR, adding new commits rather than force-pushing.
+- To ask for changes, comment on the issue and move it back to **Agent Ready**. The run continues on the same branch and the same PR, adding new commits rather than force-pushing.
 
 ### Observability
 
@@ -193,7 +193,9 @@ Each agent gets a **fresh SDK session** in the same container and working tree, 
 | Step | Scope | Done when |
 | --- | --- | --- |
 | 0 | Add `pytest`, `pytest-django` and `ruff` to the product's dev dependencies, configured by hand | `uv run pytest` and `uv run ruff check` run cleanly on `main` |
-| 1 | Webhook → inbox → worker → run container → coder → PR | Moving an issue to Ready for Agent produces a PR linked to it |
+| 1 | Webhook → inbox → worker → run container → coder → PR | Moving an issue to Agent Ready produces a PR linked to it |
+
+Step 1 is built as an MVP: only moves to **Agent Ready** are stored, the dev agent (`dev_agent.py`) runs once in a throwaway container from the agents image, and the worker (`dev_run.py`) pushes and opens the PR. There is no Linear write-back yet, and tests for runs use the Compose Postgres instead of a Postgres per run.
 | 2 | Tester writes tests first, red check, tester-file guard, green check | The coder cannot pass without the tester's tests, and edits to them fail the run |
 | 3 | Security agent and the 2-round feedback loop, draft PRs | A blocking finding returns to the coder and an unresolved one yields a draft PR |
 | 4 | Pause for questions in Linear and resume from `agent_state` | A question asked mid-run is answered in Linear and the same session continues |
@@ -202,7 +204,7 @@ Each agent gets a **fresh SDK session** in the same container and working tree, 
 ## Setup the developer does by hand
 
 - Install `gh` and Claude Code, and create an Anthropic API key with a monthly spend limit.
-- In Linear, create the statuses **Ready for Agent**, **Agent Working**, **In Review** and **Needs Human**, the **Feature** and **Bug** labels, and a webhook with a signing secret pointing at the Funnel URL.
+- In Linear, create the statuses **Agent Ready**, **Agent Working**, **In Review** and **Needs Human**, the **Feature** and **Bug** labels, and a webhook with a signing secret pointing at the Funnel URL.
 - Create the fine-grained GitHub token.
 - Enable Funnel for the Mac in the tailnet policy.
 

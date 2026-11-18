@@ -51,7 +51,7 @@ The agent harness in `agents/` runs three services next to the product: `agent-w
 
 ### First-time setup
 
-1. Create the env file and fill in `LINEAR_WEBHOOK_SECRET` and the password in `DATABASE_URL`:
+1. Create the env file and fill in `LINEAR_WEBHOOK_SECRET`, the password in `DATABASE_URL`, `GITHUB_TOKEN`, `GITHUB_REPO` and `ANTHROPIC_API_KEY`:
 
    ```sh
    cp agents/.env.example agents/.env
@@ -79,6 +79,16 @@ The agent harness in `agents/` runs three services next to the product: `agent-w
    ```sh
    docker compose up -d --build agent-webhook agent-worker agent-beat
    ```
+
+### Dev runs
+
+When an issue moves to **Agent Ready**, the worker clones the repository, starts a throwaway container from the `signal-loop-agents` image, and runs the dev agent in it. The agent changes the code on a branch named `agent/<ISSUE-KEY>-<slug>`. The worker then pushes that branch and opens a pull request. Follow a run with:
+
+```sh
+docker compose logs -f agent-worker
+```
+
+The run container receives only `ANTHROPIC_API_KEY`. The GitHub token stays in the worker, and a change to `agents/`, `.github/`, `.claude/` or `compose.yaml` fails the run.
 
 ### Migrations
 

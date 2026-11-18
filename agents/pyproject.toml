@@ -5,6 +5,8 @@ description = "Always-on agent harness for Signal Loop: Triggered by webhooks fi
 requires-python = ">=3.14"
 dependencies = [
     "celery[redis]==5.7.0",
+    "claude-agent-sdk==0.2.183",
+    "docker==7.1.0",
     "psycopg-pool==3.3.3",
     "psycopg[binary]==3.3.6",
     "starlette==1.10.0",

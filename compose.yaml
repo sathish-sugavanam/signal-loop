@@ -37,8 +37,10 @@ services:
     ports:
       - "8000:8000"
 
+  # The agent services share one image; the worker also starts dev run containers from it.
   agent-webhook:
     build: ./agents
+    image: signal-loop-agents
     env_file: ./agents/.env
     depends_on:
       db:
@@ -55,6 +57,7 @@ services:
   # Events are processed one at a time for now; raise --concurrency to scale.
   agent-worker:
     build: ./agents
+    image: signal-loop-agents
     command: [".venv/bin/celery", "-A", "signal_loop_agents.celery_app", "worker", "--concurrency=1", "--loglevel=INFO"]
     env_file: ./agents/.env
     depends_on: &worker-deps
@@ -62,11 +65,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      # Starts the run containers. Only the worker gets the Docker socket, never a run.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Run folders shared with the run containers, at the same path.
+      - agent_runs:/runs
     restart: unless-stopped
 
   # Exactly one beat process: a second one would fire every periodic task twice.
   agent-beat:
     build: ./agents
+    image: signal-loop-agents
     command: [".venv/bin/celery", "-A", "signal_loop_agents.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
     env_file: ./agents/.env
     depends_on: *worker-deps
@@ -74,3 +83,6 @@ services:
 
 volumes:
   postgres_data:
+  # Fixed name so the worker can mount it into run containers by name.
+  agent_runs:
+    name: agent_runs

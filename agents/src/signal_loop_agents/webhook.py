@@ -65,7 +65,9 @@ async def handle_linear_webhook(
 
     delivery_id = request.headers.get("linear-delivery", "").strip()
     if not delivery_id:
-        return JSONResponse({"error": "missing Linear-Delivery header"}, status_code=400)
+        return JSONResponse(
+            {"error": "missing Linear-Delivery header"}, status_code=400
+        )
 
     event_type = request.headers.get("linear-event") or payload.get("type") or "unknown"
     if not moved_to_agent_ready(event_type, payload):
@@ -105,7 +107,6 @@ def linear_webhook(
 
 
 def create_app(settings: WebhookSettings, inbox: Inbox | None = None) -> Starlette:
-    """Builds the app. Without an `inbox`, it opens a Postgres pool for the app's lifetime."""
     pool: AsyncConnectionPool | None = None
     if inbox is None:
         pool = AsyncConnectionPool(

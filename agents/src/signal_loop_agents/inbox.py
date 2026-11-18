@@ -50,7 +50,9 @@ def moved_to_agent_ready(event_type: str, payload: dict[str, Any]) -> bool:
     return str(state.get("name", "")).casefold() == AGENT_READY_STATE.casefold()
 
 
-def parse_event_from_linear(delivery_id: str, event_type: str, payload: dict[str, Any]) -> NewEvent:
+def parse_event_from_linear(
+    delivery_id: str, event_type: str, payload: dict[str, Any]
+) -> NewEvent:
     """Keys the event by its issue's readable identifier (SIG-7).
 
     Comment payloads may carry only the issue's UUID; that is used instead.
@@ -120,7 +122,7 @@ RETURNING e.id, e.delivery_id, e.action, e.issue_id, e.payload, e.attempts
 """
 
 
-def claim_next(conn: psycopg.Connection) -> InboxEvent | None:
+def get_event(conn: psycopg.Connection) -> InboxEvent | None:
     """Claims the oldest pending event whose issue has nothing else in progress."""
     try:
         with conn.transaction(), conn.cursor(row_factory=class_row(InboxEvent)) as cur:

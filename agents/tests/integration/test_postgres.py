@@ -7,6 +7,7 @@ import pytest
 from psycopg_pool import AsyncConnectionPool
 
 from signal_loop_agents import worker
+from signal_loop_agents.config import WorkerSettings
 from signal_loop_agents.inbox import (
     NewEvent,
     PostgresInbox,
@@ -128,15 +129,18 @@ def test_fail_stale_frees_the_issue_for_its_next_event(database_url, conn):
     assert claim_next(conn).delivery_id == "d-2"
 
 
+SETTINGS = WorkerSettings(database_url="unused", broker_url="memory://")
+
+
 def replace_handle_task(monkeypatch, fn) -> None:
-    monkeypatch.setattr(worker, "handle_task", fn)
+    monkeypatch.setattr(worker, "handle_task", lambda event, settings: fn(event))
 
 
 def test_pick_next_task_marks_success_done(database_url, conn, monkeypatch):
     record(database_url, new_event("d-1"))
     seen = []
     replace_handle_task(monkeypatch, seen.append)
-    assert pick_next_task(conn) is True
+    assert pick_next_task(conn, SETTINGS) is True
     assert [e.delivery_id for e in seen] == ["d-1"]
     row = conn.execute("SELECT status, finished_at IS NOT NULL FROM inbox_events").fetchone()
     assert row == ("done", True)
@@ -149,23 +153,23 @@ def test_pick_next_task_records_failure(database_url, conn, monkeypatch):
         raise ValueError("no acceptance criteria")
 
     replace_handle_task(monkeypatch, boom)
-    assert pick_next_task(conn) is True
+    assert pick_next_task(conn, SETTINGS) is True
     row = conn.execute("SELECT status, last_error FROM inbox_events").fetchone()
     assert row == ("failed", "ValueError: no acceptance criteria")
 
 
 def test_pick_next_task_with_empty_inbox_returns_false(conn):
-    assert pick_next_task(conn) is False
+    assert pick_next_task(conn, SETTINGS) is False
 
 
 def test_pick_pending_tasks_handles_every_claimable_event(database_url, conn, monkeypatch):
     record(database_url, new_event("d-1", "i-1"), new_event("d-2", "i-2"))
     handled = []
     replace_handle_task(monkeypatch, lambda e: handled.append(e.delivery_id))
-    assert pick_pending_tasks(conn) == 2
+    assert pick_pending_tasks(conn, SETTINGS) == 2
     assert handled == ["d-1", "d-2"]
     assert statuses(conn) == {"d-1": "done", "d-2": "done"}
-    assert pick_pending_tasks(conn) == 0
+    assert pick_pending_tasks(conn, SETTINGS) == 0
 
 
 def test_pick_pending_tasks_keeps_going_after_a_failure(database_url, conn, monkeypatch):
@@ -176,5 +180,5 @@ def test_pick_pending_tasks_keeps_going_after_a_failure(database_url, conn, monk
             raise RuntimeError("boom")
 
     replace_handle_task(monkeypatch, fail_first)
-    assert pick_pending_tasks(conn) == 2
+    assert pick_pending_tasks(conn, SETTINGS) == 2
     assert statuses(conn) == {"d-1": "failed", "d-2": "done"}
